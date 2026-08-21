@@ -4,18 +4,18 @@ import math
 def depth_curve(z):
     return 20.26 - 15.11 * math.log(z + 0.5)
 
-def image_to_da3_point(
+def image_to_depth_point(
         u,
         v,
         image_width,
         image_height,
-        da3_width=504,
-        da3_height=504
+        depth_width,
+        depth_height
 ):
 
     return (
-        u * da3_width / image_width,
-        v * da3_height / image_height
+        u * depth_width / image_width,
+        v * depth_height / image_height
     )
 
 
@@ -54,18 +54,23 @@ def calculate_sign_size_3d(
         depth,
         K,
         image_width,
-        image_height
+        image_height,
+        depth_width,
+        depth_height
 ):
     points=[]
 
     for p in corners:
 
-        # image 2048 -> DA3 504
-        u_da3,v_da3=image_to_da3_point(
+        # Convert source-image coordinates to the actual DA3 depth/K
+        # coordinate system instead of assuming a fixed 504 x 504 size.
+        u_depth,v_depth=image_to_depth_point(
             p[0],
             p[1],
             image_width,
-            image_height
+            image_height,
+            depth_width,
+            depth_height
         )
 
         z=depth[
@@ -78,8 +83,8 @@ def calculate_sign_size_3d(
             scale_z = 0.001
 
         xyz=pixel_to_xyz(
-            u_da3,
-            v_da3,
+            u_depth,
+            v_depth,
             z * scale_z,
             K
         )

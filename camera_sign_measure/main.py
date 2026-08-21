@@ -353,6 +353,7 @@ def run_sign_pipeline(
 
     K = depth_pred.intrinsics[0].copy()
     depth = depth_pred.depth[0]
+    depth_height, depth_width = depth.shape[:2]
 
     print("K:", K)
     print("depth shape:", depth.shape)
@@ -420,6 +421,8 @@ def run_sign_pipeline(
             K,
             image_width,
             image_height,
+            depth_width,
+            depth_height,
         )
 
         print(
