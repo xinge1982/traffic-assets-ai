@@ -15,6 +15,10 @@ from camera_geometry import calculate_sign_size_3d
 
 output_dir = "output"
 output_json = os.path.join(output_dir, "sign_models.json")
+camera_calibration_file = os.getenv(
+    "CAMERA_CALIBRATION_FILE",
+    "input/camera_calibration.json"
+)
 
 # -----------------------
 # Global Models
@@ -111,6 +115,100 @@ def decode_base64_image(image_base64):
         )
 
     return image
+
+
+
+def load_camera_calibration(
+        filename,
+        image_width,
+        image_height
+):
+    """
+    Load Brown-Conrady camera calibration parameters from JSON.
+
+    Supported formats:
+        camera_matrix + distortion_coefficients
+    or:
+        fx, fy, cx, cy + k1, k2, p1, p2, k3
+
+    image_width/image_height in the file describe the resolution used
+    during calibration. Intrinsics are scaled to the current image.
+    """
+    with open(filename, "r", encoding="utf-8") as calibration_file:
+        calibration = json.load(calibration_file)
+
+    if "camera_matrix" in calibration:
+        camera_matrix = np.asarray(
+            calibration["camera_matrix"],
+            dtype=np.float64
+        ).reshape(3, 3)
+    else:
+        required_intrinsics = (
+            "fx",
+            "fy",
+            "cx",
+            "cy"
+        )
+        missing = [
+            key
+            for key in required_intrinsics
+            if key not in calibration
+        ]
+        if missing:
+            raise ValueError(
+                "Missing camera calibration fields: "
+                + ", ".join(missing)
+            )
+
+        camera_matrix = np.array(
+            [
+                [calibration["fx"], 0.0, calibration["cx"]],
+                [0.0, calibration["fy"], calibration["cy"]],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64
+        )
+
+    if "distortion_coefficients" in calibration:
+        distortion_coefficients = np.asarray(
+            calibration["distortion_coefficients"],
+            dtype=np.float64
+        ).reshape(-1)
+    else:
+        distortion_coefficients = np.array(
+            [
+                calibration.get("k1", 0.0),
+                calibration.get("k2", 0.0),
+                calibration.get("p1", 0.0),
+                calibration.get("p2", 0.0),
+                calibration.get("k3", 0.0),
+            ],
+            dtype=np.float64
+        )
+
+    calibration_width = float(
+        calibration.get("image_width", image_width)
+    )
+    calibration_height = float(
+        calibration.get("image_height", image_height)
+    )
+
+    if calibration_width <= 0 or calibration_height <= 0:
+        raise ValueError(
+            "Calibration image_width and image_height must be positive."
+        )
+
+    scale_x = image_width / calibration_width
+    scale_y = image_height / calibration_height
+
+    camera_matrix = camera_matrix.copy()
+    camera_matrix[0, 0] *= scale_x
+    camera_matrix[0, 2] *= scale_x
+    camera_matrix[1, 1] *= scale_y
+    camera_matrix[1, 2] *= scale_y
+
+    return camera_matrix, distortion_coefficients
+
 
 def save_depth(depth, filename):
     depth_min = float(np.min(depth))
@@ -326,7 +424,8 @@ def normalize_model_translation(models):
     return models
 
 def run_sign_pipeline(
-        image_base64
+        image_base64,
+        calibration_path=camera_calibration_file
 ):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -338,6 +437,16 @@ def run_sign_pipeline(
 
     image_height, image_width = image.shape[:2]
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    camera_matrix, distortion_coefficients = load_camera_calibration(
+        calibration_path,
+        image_width,
+        image_height
+    )
+
+    print("camera calibration:", calibration_path)
+    print("camera matrix:", camera_matrix)
+    print("distortion coefficients:", distortion_coefficients)
 
     detections = _detector.detect(
         image,
@@ -418,11 +527,14 @@ def run_sign_pipeline(
         sign_result = calculate_sign_size_3d(
             corners.astype(np.int32),
             resized_depth,
+            mask,
             K,
             image_width,
             image_height,
             depth_width,
             depth_height,
+            camera_matrix,
+            distortion_coefficients,
         )
 
         print(
