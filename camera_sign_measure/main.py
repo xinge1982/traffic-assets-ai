@@ -17,7 +17,7 @@ output_dir = "output"
 output_json = os.path.join(output_dir, "sign_models.json")
 camera_calibration_file = os.getenv(
     "CAMERA_CALIBRATION_FILE",
-    "input/camera_calibration.json"
+    "input/camera_calibration_jinji.json"
 )
 
 # -----------------------
@@ -606,7 +606,7 @@ def run_sign_pipeline(
 if __name__ == "__main__":
     initialize_pipeline()
 
-    image_base64 = image_file_to_base64("input/251106_040928830_camera_4_19798.jpg")
+    image_base64 = image_file_to_base64("input/0001603.jpeg")
     result = run_sign_pipeline(
         image_base64
     )

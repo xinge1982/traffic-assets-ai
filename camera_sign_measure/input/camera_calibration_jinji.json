@@ -1,0 +1,29 @@
+{
+  "description": "Copy this file to camera_calibration.json and replace all values with the calibration result for the camera.",
+  "image_width": 3840,
+  "image_height": 2880,
+  "camera_matrix": [
+    [
+      2630.828844872921,
+      0,
+      1905.969826707353
+    ],
+    [
+      0,
+      2630.828844872921,
+      1415.7948909681757
+    ],
+    [
+      0,
+      0,
+      1
+    ]
+  ],
+  "distortion_coefficients": [
+    0.06288643729140438,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ]
+}
