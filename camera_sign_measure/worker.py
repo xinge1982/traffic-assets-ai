@@ -137,6 +137,29 @@ def on_request(ch, method, properties, body):
     user_id = ""
     try:
         # 解析消息体
+        # {
+        #   "payload": {
+        #     "action": "sign_measure",
+        #     "image_url": "https://example.com/image.jpg",
+        #     "camera_calibration": {
+        #       "image_width": 3840,
+        #       "image_height": 2880,
+        #       "camera_matrix": [
+        #         [2630.828844872921, 0.0, 1905.969826707353],
+        #         [0.0, 2630.828844872921, 1415.7948909681757],
+        #         [0.0, 0.0, 1.0]
+        #       ],
+        #       "distortion_coefficients": [
+        #         0.06288643729140438,
+        #         0.0,
+        #         0.0,
+        #         0.0,
+        #         0.0
+        #       ]
+        #     }
+        #   }
+        # }
+
         data = json.loads(body)
         task_id = data["task_id"]
         user_id = data["user_id"]
