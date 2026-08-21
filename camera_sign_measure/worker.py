@@ -16,6 +16,24 @@ from main import (
     run_sign_pipeline
 )
 
+
+DEFAULT_CAMERA_CALIBRATION = {
+    "image_width": 3840,
+    "image_height": 2880,
+    "camera_matrix": [
+        [2630.828844872921, 0.0, 1905.969826707353],
+        [0.0, 2630.828844872921, 1415.7948909681757],
+        [0.0, 0.0, 1.0],
+    ],
+    "distortion_coefficients": [
+        0.06288643729140438,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+}
+
 print("Initializing sign pipeline...")
 
 initialize_pipeline()
@@ -78,6 +96,30 @@ def load_image_base64(payload):
         "missing image_base64 or image_url"
     )
 
+def get_camera_calibration(payload):
+    """
+    Read camera calibration parameters from payload.camera_calibration.
+    Use the built-in calibration when the field is absent or null.
+    """
+    camera_calibration = payload.get(
+        "camera_calibration"
+    )
+
+    if camera_calibration is None:
+        print(
+            "     camera_calibration not provided; "
+            "using default calibration."
+        )
+        return DEFAULT_CAMERA_CALIBRATION
+
+    if not isinstance(camera_calibration, dict):
+        raise ValueError(
+            "payload.camera_calibration must be a JSON object"
+        )
+
+    return camera_calibration
+
+
 # 获取环境变量的值，如果变量不存在则返回默认值
 def get_config(key, default=None):
     return os.getenv(key, default)
@@ -134,8 +176,13 @@ def on_request(ch, method, properties, body):
             payload
         )
 
+        camera_calibration = get_camera_calibration(
+            payload
+        )
+
         result = run_sign_pipeline(
-            image_base64
+            image_base64,
+            camera_calibration
         )
 
         print(f" [✔] Task {task_id}: Image detect done ")
