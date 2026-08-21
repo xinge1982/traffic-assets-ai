@@ -121,7 +121,8 @@ def load_camera_calibration(
         image_height
 ):
     """
-    Load Brown-Conrady camera calibration parameters from JSON.
+    Load Brown-Conrady camera calibration parameters from a JSON file
+    path or a dictionary.
 
     Supported formats:
         camera_matrix + distortion_coefficients
@@ -131,8 +132,11 @@ def load_camera_calibration(
     image_width/image_height in the file describe the resolution used
     during calibration. Intrinsics are scaled to the current image.
     """
-    with open(filename, "r", encoding="utf-8") as calibration_file:
-        calibration = json.load(calibration_file)
+    if isinstance(filename, dict):
+        calibration = filename
+    else:
+        with open(filename, "r", encoding="utf-8") as calibration_file:
+            calibration = json.load(calibration_file)
 
     if "camera_matrix" in calibration:
         camera_matrix = np.asarray(
