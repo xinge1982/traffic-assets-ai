@@ -1,3 +1,4 @@
+import argparse
 import base64
 import json
 import os
@@ -15,10 +16,6 @@ from camera_geometry import calculate_sign_size_3d
 
 output_dir = "output"
 output_json = os.path.join(output_dir, "sign_models.json")
-camera_calibration_file = os.getenv(
-    "CAMERA_CALIBRATION_FILE",
-    "input/camera_calibration_jinji.json"
-)
 
 # -----------------------
 # Global Models
@@ -425,7 +422,7 @@ def normalize_model_translation(models):
 
 def run_sign_pipeline(
         image_base64,
-        calibration_path=camera_calibration_file
+        calibration_path
 ):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -603,12 +600,39 @@ def run_sign_pipeline(
     return output_data
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Detect traffic signs in a vehicle-camera image "
+            "and estimate their real-world dimensions."
+        )
+    )
+
+    parser.add_argument(
+        "--image",
+        required=True,
+        help="Path to the input vehicle-camera image."
+    )
+    parser.add_argument(
+        "--camera-calibration",
+        required=True,
+        help="Path to the camera calibration JSON file."
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_arguments()
+
     initialize_pipeline()
 
-    image_base64 = image_file_to_base64("input/0001603.jpeg")
+    image_base64 = image_file_to_base64(
+        args.image
+    )
     result = run_sign_pipeline(
-        image_base64
+        image_base64,
+        args.camera_calibration
     )
 
     with open(output_json, "w", encoding="utf-8") as json_file:
