@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
@@ -30,16 +31,29 @@ import requests
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
+
+
+def find_repository_root(script_dir):
+    """Find the nearest ancestor that contains camera_sign_measure/."""
+    candidates = [script_dir, *script_dir.parents]
+    for candidate in candidates:
+        if (candidate / "camera_sign_measure").is_dir():
+            return candidate
+    raise RuntimeError(
+        "Could not find repository root containing camera_sign_measure/ "
+        f"above {script_dir}"
+    )
+
+
+REPO_ROOT = find_repository_root(SCRIPT_DIR)
 CAMERA_MEASURE_DIR = REPO_ROOT / "camera_sign_measure"
 
-if str(CAMERA_MEASURE_DIR) not in sys.path:
-    sys.path.insert(0, str(CAMERA_MEASURE_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from camera_sign_measure.camera_geometry import median_depth_inside_mask  # noqa: E402
 from camera_sign_measure.depth_anything import DepthAnythingV3  # noqa: E402
 from camera_sign_measure.geometry import mask_to_contour_quad  # noqa: E402
-from camera_sign_measure.main import order_quad_points  # noqa: E402
 from camera_sign_measure.sam2_segmentor import SAM2Segmentor  # noqa: E402
 
 
@@ -59,6 +73,52 @@ WGS84_F = 1.0 / 298.257223563
 WGS84_E2 = WGS84_F * (2.0 - WGS84_F)
 
 
+def order_quad_points(points):
+    """Return four image points as top-left, top-right, bottom-right, bottom-left.
+
+    This small geometry helper is intentionally local. Importing it from
+    camera_sign_measure.main executes that inference entry point and pulls in
+    YOLO, even though this training-data generator already receives bounding
+    boxes from the CSV.
+    """
+    points = np.asarray(points, dtype=np.float32).reshape(-1, 2)
+    if points.shape != (4, 2):
+        raise ValueError(
+            f"Expected four 2D corner points, got shape {points.shape}"
+        )
+    if not np.all(np.isfinite(points)):
+        raise ValueError("Corner points contain non-finite values")
+
+    # Split into the two left-most and two right-most points. This avoids the
+    # duplicate-corner failure that sum/difference ordering can have for a
+    # near-symmetric diamond.
+    x_sorted = points[np.argsort(points[:, 0], kind="stable")]
+    left = x_sorted[:2]
+    right = x_sorted[2:]
+
+    left = left[np.argsort(left[:, 1], kind="stable")]
+    top_left, bottom_left = left
+
+    distances = np.linalg.norm(right - top_left, axis=1)
+    bottom_right = right[int(np.argmax(distances))]
+    top_right = right[int(np.argmin(distances))]
+
+    ordered = np.asarray(
+        [top_left, top_right, bottom_right, bottom_left],
+        dtype=np.float32,
+    )
+
+    # A degenerate quadrilateral cannot support width/height geometry.
+    signed_double_area = float(
+        np.dot(ordered[:, 0], np.roll(ordered[:, 1], -1))
+        - np.dot(ordered[:, 1], np.roll(ordered[:, 0], -1))
+    )
+    if abs(signed_double_area) < 1e-3:
+        raise ValueError("Degenerate quadrilateral after corner ordering")
+
+    return ordered
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description=(
@@ -71,9 +131,16 @@ def parse_arguments():
         default=str(DEFAULT_INPUT_CSV),
         help="Source CSV. Default: sign_true_depth/input/camera_sign.csv",
     )
-    parser.add_argument(
+    image_source = parser.add_mutually_exclusive_group(required=True)
+    image_source.add_argument(
+        "--image-root",
+        help=(
+            "Local root directory prepended to each CSV img value, "
+            "for example /home/ubuntu/Pictures/road_images"
+        ),
+    )
+    image_source.add_argument(
         "--image-url-prefix",
-        required=True,
         help=(
             "HTTP/HTTPS prefix prepended to each CSV img value, "
             "for example https://server.example/photos/"
@@ -151,6 +218,15 @@ def parse_arguments():
         type=int,
         default=None,
         help="Optional maximum number of CSV rows to process.",
+    )
+    parser.add_argument(
+        "--exclude-feature-id",
+        action="append",
+        default=[],
+        help=(
+            "feature_id to exclude before processing; repeat this option "
+            "for multiple IDs"
+        ),
     )
     return parser.parse_args()
 
@@ -337,6 +413,44 @@ def build_image_url(prefix, relative_path):
         safe_path,
     )
 
+
+def download_image(
+        session,
+        image_url,
+        destination,
+        timeout,
+        overwrite=False,
+):
+    destination = Path(destination)
+
+    if destination.exists() and not overwrite:
+        return
+
+    destination.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    temporary = destination.with_suffix(
+        destination.suffix + ".part"
+    )
+
+    response = session.get(
+        image_url,
+        timeout=timeout,
+        stream=True,
+    )
+    response.raise_for_status()
+
+    with open(temporary, "wb") as output_file:
+        for chunk in response.iter_content(
+                chunk_size=1024 * 1024
+        ):
+            if chunk:
+                output_file.write(chunk)
+
+    temporary.replace(destination)
+
+
 def copy_local_image(
         source,
         destination,
@@ -362,24 +476,6 @@ def copy_local_image(
 
     shutil.copy2(source, temporary)
     temporary.replace(destination)
-
-
-source_image_root = Path(
-    "/home/ubuntu/Pictures/road_images"
-)
-
-# CSV/数据库中的相对路径
-image_relative_path = row["image_url"]
-
-source_image_path = (
-    source_image_root / image_relative_path
-)
-
-copy_local_image(
-    source=source_image_path,
-    destination=local_image_path,
-    overwrite=args.overwrite_images,
-)
 
 
 def depth_region_statistics(depth, mask, erosion_size=7):
@@ -570,6 +666,7 @@ def process_detection(
 def output_fieldnames(source_fieldnames):
     generated = [
         "sign_group_id",
+        "image_source",
         "image_url",
         "local_image_path",
         "depth_path",
@@ -620,7 +717,10 @@ def output_fieldnames(source_fieldnames):
     return fields
 
 
-def read_source_rows(input_csv, limit):
+def read_source_rows(input_csv, limit, excluded_feature_ids=None):
+    excluded_feature_ids = set(
+        map(str, excluded_feature_ids or [])
+    )
     with open(
             input_csv,
             "r",
@@ -655,6 +755,8 @@ def read_source_rows(input_csv, limit):
 
         rows = []
         for row in reader:
+            if str(row.get("feature_id", "")) in excluded_feature_ids:
+                continue
             rows.append(row)
             if limit is not None and len(rows) >= limit:
                 break
@@ -687,12 +789,18 @@ def main():
 
     input_csv = Path(args.input_csv).resolve()
     output_dir = Path(args.output_dir).resolve()
+    image_root = (
+        Path(args.image_root).expanduser().resolve()
+        if args.image_root
+        else None
+    )
     image_cache_dir = output_dir / "images"
     depth_dir = output_dir / "depth"
 
     source_fieldnames, source_rows = read_source_rows(
         input_csv,
         args.limit,
+        args.exclude_feature_id,
     )
 
     rows_by_image = defaultdict(list)
@@ -746,19 +854,33 @@ def main():
                 relative_image = validate_relative_image_path(
                     image_value
                 )
-                image_url = build_image_url(
-                    args.image_url_prefix,
-                    relative_image,
-                )
                 local_image_path = image_cache_dir.joinpath(
                     *relative_image.parts
                 )
-
-                copy_local_image(
-                    source_image_path,
-                    local_image_path,
-                    args.overwrite_images,
-                )
+                if image_root is not None:
+                    source_image_path = image_root.joinpath(
+                        *relative_image.parts
+                    )
+                    copy_local_image(
+                        source_image_path,
+                        local_image_path,
+                        args.overwrite_images,
+                    )
+                    image_url = ""
+                    image_source = str(source_image_path)
+                else:
+                    image_url = build_image_url(
+                        args.image_url_prefix,
+                        relative_image,
+                    )
+                    download_image(
+                        session,
+                        image_url,
+                        local_image_path,
+                        args.request_timeout,
+                        args.overwrite_images,
+                    )
+                    image_source = image_url
 
                 image = cv2.imread(
                     str(local_image_path),
@@ -863,6 +985,7 @@ def main():
                             args.overwrite_artifacts,
                             pose_options,
                         )
+                        result["image_source"] = image_source
                         result["image_url"] = image_url
                         result["local_image_path"] = (
                             local_image_path
@@ -882,6 +1005,7 @@ def main():
                         failed = dict(row)
                         failed.update(
                             {
+                                "image_source": image_source,
                                 "image_url": image_url,
                                 "local_image_path": (
                                     local_image_path
