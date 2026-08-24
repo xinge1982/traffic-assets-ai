@@ -36,11 +36,11 @@ CAMERA_MEASURE_DIR = REPO_ROOT / "camera_sign_measure"
 if str(CAMERA_MEASURE_DIR) not in sys.path:
     sys.path.insert(0, str(CAMERA_MEASURE_DIR))
 
-from camera_geometry import median_depth_inside_mask  # noqa: E402
-from depth_anything import DepthAnythingV3  # noqa: E402
-from geometry import mask_to_contour_quad  # noqa: E402
-from main import order_quad_points  # noqa: E402
-from sam2_segmentor import SAM2Segmentor  # noqa: E402
+from camera_sign_measure.camera_geometry import median_depth_inside_mask  # noqa: E402
+from camera_sign_measure.depth_anything import DepthAnythingV3  # noqa: E402
+from camera_sign_measure.geometry import mask_to_contour_quad  # noqa: E402
+from camera_sign_measure.main import order_quad_points  # noqa: E402
+from camera_sign_measure.sam2_segmentor import SAM2Segmentor  # noqa: E402
 
 
 DEFAULT_INPUT_CSV = SCRIPT_DIR / "input" / "camera_sign.csv"
