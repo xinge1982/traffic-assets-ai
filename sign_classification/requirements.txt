@@ -1,0 +1,7 @@
+torch>=2.6,<3
+torchvision>=0.21,<1
+open_clip_torch>=3.2,<4
+Pillow>=10,<13
+numpy>=1.24,<3
+scikit-learn>=1.5,<2
+joblib>=1.4,<2
