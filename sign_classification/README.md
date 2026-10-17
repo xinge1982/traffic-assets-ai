@@ -90,3 +90,15 @@ python -m unittest discover -s sign_classification/tests -v
 测试用固定特征编码器代替 CLIP 下载，验证数据扫描、划分、预处理、真实分类头训练、保存加载、Top-K 和重复检测。真实识别效果需要安装完整依赖后以实际训练集验证。
 
 接口参考：[OpenCLIP 官方文档](https://github.com/mlfoundations/open_clip)。
+
+## Go 本地推理
+
+已提供 [ONNX 导出脚本](export_onnx.py) 和 [Go 推理模块](go/README.md)。训练完成后一次性导出 CLIP 图像编码器、特征归一化和分类头；Go 部署时仅需导出的模型和 ONNX Runtime，无需 Python。当前导出支持本项目默认的 `ViT-B-32`。
+
+```bash
+# 仓库根目录，已有 output/classifier.joblib 后执行
+python -m pip install -r sign_classification/requirements-export.txt
+python -m sign_classification.export_onnx --model-dir sign_classification/output --verify-image D:/signs/test.png
+```
+
+Windows 编译、单图/目录预测、Go 调用示例和概率核对见 [go/README.md](go/README.md)。

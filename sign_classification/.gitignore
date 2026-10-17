@@ -3,3 +3,5 @@ data/
 output/
 *.joblib
 *.npz
+/go/sign-predict
+/go/sign-predict.exe
