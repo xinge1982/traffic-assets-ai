@@ -1,0 +1,1 @@
+{"format_version": 1, "model_file": "sign_classifier.onnx", "input_name": "images", "output_name": "probabilities", "image_size": 224, "preprocessing": "exif_alpha_white_square_pad_bicubic_v1", "mean": [0.48145466, 0.4578275, 0.40821073], "std": [0.26862954, 0.26130258, 0.27577711], "classes": ["A", "B"]}
