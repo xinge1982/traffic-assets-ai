@@ -81,6 +81,43 @@ python -m sign_classification.predict --model-dir sign_classification/output --i
 
 迁移机器后可加 `--pretrained D:/models/open_clip_pytorch_model.bin`，必须是训练时完全相同的权重，维数相同不代表兼容。请将模型目录和原始 CLIP 权重一起管理。只加载可信来源的 classifier.joblib，其底层 pickle 格式可以执行代码。
 
+## 按预测类别批量整理图片
+
+`classify_directory.py` 递归扫描输入目录，读取训练结果，按预测类别**复制**图片。源文件不移动、不修改。默认读取脚本旁的 `sign_classification/output/classifier.joblib`，模型只加载一次；CLIP 特征按批次处理，避免一次保存全部特征。
+
+在仓库根目录运行：
+
+```powershell
+.\vent\Scripts\python.exe -m sign_classification.classify_directory `
+  --input "D:/signs/unclassified" `
+  --output "D:/signs/classified" `
+  --pretrained "D:/models/open_clip_pytorch_model.bin" `
+  --batch-size 16
+```
+
+`--pretrained` 使用训练时相同的本地 CLIP 权重；如果训练配置中记录的权重路径仍有效，可以省略。自定义训练结果目录用 `--model-dir D:/models/sign_classifier`。脚本也支持直接执行，便于 PyCharm 使用“脚本路径”运行：
+
+```powershell
+.\vent\Scripts\python.exe sign_classification/classify_directory.py --input "D:/signs/unclassified" --output "D:/signs/classified"
+```
+
+PyCharm 的参数填写 `--input "D:/signs/unclassified" --output "D:/signs/classified" --pretrained "D:/models/open_clip_pytorch_model.bin"`；也可使用模块名称 `sign_classification.classify_directory`。相对输入、输出路径基于工作目录解析；默认模型目录基于脚本位置解析。
+
+| 输入示例 | 输出示例（假设预测为 10100_停车让行标志） |
+| --- | --- |
+| unclassified/a.png | classified/10100_停车让行标志/a.png |
+| unclassified/camera1/a.png | classified/10100_停车让行标志/camera1/a.png |
+| unclassified/camera2/a.png | classified/10100_停车让行标志/camera2/a.png |
+
+类别目录名来自训练配置，不根据图片文件名推断。保留类别目录下的输入相对路径以避免同名图片覆盖。输出目录必须不存在或为空，且不能放在输入目录内部。支持的图片格式与训练一致，非图片文件忽略。
+
+- `--device auto/cpu/cuda/cuda:0`：选择推理设备，默认 auto。
+- `--top-k 3`：结果清单保留的候选数，默认 3。
+- `--min-probability 0.6`：可选阈值；最佳概率低于阈值的图片放入 `_待复核`。默认 0，全部按最佳类别归档。阈值不能保证检测未知类别。
+- `--skip-errors`：遇到推理失败的批次时逐张重试，跳过失败图片并记录错误。默认遇错停止；文件写入错误始终停止。任何图片推理失败时，即使启用跳过，最终退出码仍为 1。
+
+输出根目录另有 `classification_results.jsonl`（每行一张图片的源路径、输出路径、预测类别、最佳概率、accepted、Top-K 或错误）和 `summary.json`（处理数量和各输出目录计数）。中途失败时已复制的图片及已写入的清单保留，`summary.json` 只在全部处理完成后生成；重试请使用新的输出目录。
+
 ## 检查
 
 ```bash
