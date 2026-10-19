@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 from pathlib import Path
@@ -84,10 +85,21 @@ def classify_directory(args):
                           args.device, args.batch_size)
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / "classification_results.jsonl"
+    csv_path = output / "classification_results.csv"
     summary = {"total": len(paths), "classified": 0, "review": 0, "failed": 0,
-               "output": str(output), "report": str(report_path)}
+               "output": str(output), "report": str(report_path), "csv": str(csv_path)}
     counts = {}
-    with report_path.open("x", encoding="utf-8") as report:
+    with (report_path.open("x", encoding="utf-8") as report,
+          csv_path.open("x", encoding="utf-8-sig", newline="") as csv_report):
+        # BOM makes Chinese filenames/class names readable in Windows Excel.
+        csv_writer = csv.DictWriter(csv_report, fieldnames=["pic", "class", "confidence"])
+        csv_writer.writeheader()
+        csv_report.flush()
+
+        def write_csv(path, class_name="", confidence=""):
+            csv_writer.writerow({"pic": path.name, "class": class_name, "confidence": confidence})
+            csv_report.flush()
+
         def write_row(row):
             report.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
             report.flush()
@@ -114,6 +126,7 @@ def classify_directory(args):
                 if error is not None:
                     summary["failed"] += 1
                     write_row({"path": str(path), "status": "error", "error": error})
+                    write_csv(path)
                     print(f"跳过：{path}：{error}", file=sys.stderr, flush=True)
                     continue
                 folder = result["class_name"] if result["accepted"] else REVIEW_FOLDER
@@ -128,6 +141,7 @@ def classify_directory(args):
                 counts[folder] = counts.get(folder, 0) + 1
                 write_row({"path": str(path), "output_path": str(destination),
                            "status": "copied", "probability": result["top_k"][0]["probability"], **result})
+                write_csv(path, result["class_name"], result["top_k"][0]["probability"])
             print(f"已处理 {min(start + args.batch_size, len(paths))}/{len(paths)}", flush=True)
     summary["folder_counts"] = counts
     (output / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

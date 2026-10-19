@@ -1,5 +1,6 @@
 import argparse
 import contextlib
+import csv
 import io
 import json
 from pathlib import Path
@@ -89,6 +90,17 @@ class DirectoryClassificationTests(unittest.TestCase):
             self.assertEqual(copied.read_bytes(), original.read_bytes())
             self.assertEqual(len(row["top_k"]), 2)
         self.assertEqual(len({row["output_path"] for row in rows}), 3)
+        csv_path = Path(summary["csv"])
+        self.assertTrue(csv_path.read_bytes().startswith(b"\xef\xbb\xbf"))
+        with csv_path.open(encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            csv_rows = list(reader)
+            self.assertEqual(reader.fieldnames, ["pic", "class", "confidence"])
+        self.assertEqual(len(csv_rows), len(rows))
+        for actual, expected in zip(csv_rows, rows):
+            self.assertEqual(actual["pic"], Path(expected["path"]).name)
+            self.assertEqual(actual["class"], expected["class_name"])
+            self.assertEqual(float(actual["confidence"]), expected["probability"])
         self.assertEqual(json.loads((args.output / "summary.json").read_text(encoding="utf-8")), summary)
 
     @patch("sign_classification.classify_directory.ClipEncoder", PixelEncoder)
@@ -98,6 +110,10 @@ class DirectoryClassificationTests(unittest.TestCase):
         self.assertEqual(summary["review"], 3)
         self.assertEqual(summary["classified"], 0)
         self.assertEqual(len(list((args.output / "_待复核").rglob("*.png"))), 3)
+        with Path(summary["csv"]).open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertTrue(all(row["class"] in self.artifact["config"]["classes"] for row in rows))
+        self.assertTrue(all(float(row["confidence"]) < 1. for row in rows))
 
     @patch("sign_classification.classify_directory.ClipEncoder", PixelEncoder)
     def test_bad_image_skipped_without_discarding_good_batch_members(self):
@@ -109,6 +125,23 @@ class DirectoryClassificationTests(unittest.TestCase):
         rows = [json.loads(line) for line in Path(summary["report"]).read_text(encoding="utf-8").splitlines()]
         self.assertEqual(len(rows), 4)
         self.assertEqual(sum(row["status"] == "error" for row in rows), 1)
+        with Path(summary["csv"]).open(encoding="utf-8-sig", newline="") as stream:
+            csv_rows = list(csv.DictReader(stream))
+        self.assertEqual(len(csv_rows), 4)
+        self.assertEqual([r for r in csv_rows if r["pic"] == "bad.png"],
+                         [{"pic": "bad.png", "class": "", "confidence": ""}])
+
+    @patch("sign_classification.classify_directory.ClipEncoder", PixelEncoder)
+    def test_csv_quotes_chinese_filename_with_comma(self):
+        filename = '标志,一号.png'
+        Image.new("RGB", (20, 10), "red").save(self.source / filename)
+        summary = self.run_sort(self.args())
+        with Path(summary["csv"]).open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(len(rows), 4)
+        row = next(row for row in rows if row["pic"] == filename)
+        self.assertEqual(row["class"], self.artifact["config"]["classes"][0])
+        self.assertGreater(float(row["confidence"]), 0.)
 
     def test_invalid_paths_do_not_modify_input_or_output(self):
         for output in [self.source, self.source / "nested"]:

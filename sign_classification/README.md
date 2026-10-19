@@ -118,6 +118,8 @@ PyCharm 的参数填写 `--input "D:/signs/unclassified" --output "D:/signs/clas
 
 输出根目录另有 `classification_results.jsonl`（每行一张图片的源路径、输出路径、预测类别、最佳概率、accepted、Top-K 或错误）和 `summary.json`（处理数量和各输出目录计数）。中途失败时已复制的图片及已写入的清单保留，`summary.json` 只在全部处理完成后生成；重试请使用新的输出目录。
 
+同时生成 `classification_results.csv`，使用 UTF-8 BOM 编码，方便 Excel 打开中文。列为 `pic`（原图片文件名，含扩展名）、`class`（模型预测的最佳类别）和 `confidence`（该类别的概率，范围 0～1）。低置信度图片仍记录预测类别，不写成 `_待复核`；启用 `--skip-errors` 时失败图片也有一行，但类别和置信度留空，具体错误见 JSONL。同名图片可能有多行，其完整路径可在 JSONL 中查看。CSV 逐行保存，中途停止时保留已写入结果。
+
 ## 检查
 
 ```bash
