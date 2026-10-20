@@ -159,6 +159,40 @@ CSV 列为 `pic,old_class,new_class,status,old_path,new_path`。路径相对于�
 
 本脚本只比较按文件名匹配的类别归属，不比较图片内容。图片被重命名时会分别表现为 only_old 和 only_new，不会自动判断它们是同一张图。
 
+## 根据人工核对结果校正训练集类别
+
+`reconcile_training_classes.py` 按**图片文件名（含扩展名，区分大小写）**匹配训练集和核对目录，使用两边的一级子目录名作为类别。图片在两边均可唯一匹配且类别不同时，将**训练集里的原图片**移动到核对类别下；不会用 reviewed 图片替换训练图片，不会把 reviewed 独有的图片加入训练集，也不会修改 reviewed 目录。
+
+```powershell
+# 可选：先生成预览报告，不移动图片
+.\vent\Scripts\python.exe -m sign_classification.reconcile_training_classes `
+  --train-dir "D:/amap/src/traffic-assets-ai/doc/classes" `
+  --reviewed-dir "D:/signs/reviewed" --dry-run
+
+# 执行实际移动
+.\vent\Scripts\python.exe -m sign_classification.reconcile_training_classes `
+  --train-dir "D:/amap/src/traffic-assets-ai/doc/classes" `
+  --reviewed-dir "D:/signs/reviewed"
+```
+
+也支持在 PyCharm 中直接运行 `sign_classification/reconcile_training_classes.py` 并传入相同参数。`--train-dir` 是训练图片目录，不是保存 classifier.joblib 的 output。训练集与 reviewed 目录不能相同或互相嵌套。
+
+例如训练图片 `classes/旧类别/camera1/001.png`，核对图片 `reviewed/新类别/001.png`，移动后是 `classes/新类别/camera1/001.png`；保留原类别下面的子目录结构。同名图片在任一侧有多张时跳过，目标路径已存在时跳过，不覆盖。为保证完整复制后才删除源文件，移动过程使用独占创建目标文件、复制并保留时间等属性、最后删除源文件的方式；复制失败会清理本次创建的目标。旧的空类别目录保留。
+
+默认在训练目录下生成带时间戳的 `training_reconcile_*.csv` 和对应 `.summary.json`，也可用 `--report D:/reports/reconcile.csv` 自定义（报告和汇总不能已存在，也不能写到 reviewed 内部）。CSV 使用 UTF-8 BOM，列为 `pic,old_class,new_class,status,source_path,target_path,reviewed_path,message`。汇总包含处理数量、状态计数以及实际移动的“旧类别→新类别”数量。记录逐行保存，中断时保留已写入记录，JSON 汇总只在处理完成后生成。
+
+| status | 含义 |
+| --- | --- |
+| moved / would_move | 已移动 / dry-run 预计移动 |
+| unchanged | 类别一致，不移动 |
+| not_reviewed | 训练图片不在核对目录中，保留 |
+| not_in_training | 核对图片不在训练集中，不新增 |
+| ambiguous | 同名图片无法唯一匹配，跳过 |
+| conflict | 目标已存在或指向训练目录之外，跳过 |
+| error | 操作失败，详见 message；继续处理其他图片，最终退出码为 1 |
+
+类别来自 reviewed 的实际目录，包括 `_待复核`；运行前应将未完成核对的图片移出本次 reviewed 输入目录。该脚本只校正训练图片的存放位置，不更新已经训练好的模型。校正后重新训练，才能让后续推理使用新的类别标签。
+
 ## 检查
 
 ```bash
