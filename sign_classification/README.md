@@ -134,6 +134,31 @@ PyCharm 的参数填写 `--input "D:/signs/unclassified" --output "D:/signs/clas
 
 在输入目录中生成或更新 `classification_results.csv`，列为 `pic,class,confidence`：图片原文件名（含扩展名）、类别目录名和固定值 `1.0`。使用 UTF-8 BOM 编码，支持 Excel 中文。`confidence=1.0` 用于标记人工确认结果并兼容原有三列读取程序，不代表模型计算出的概率。图片文件保持不变，CSV 写入成功后替换旧文件。没有图片时报告错误并保留旧 CSV。同名图片全部保留并在命令行提醒，以 pic 为键转换为 map 时应先处理重名。
 
+## 对比旧分类和人工核对后的目录
+
+`compare_classification_dirs.py` 读取两边的实际图片目录，以**文件名（含扩展名，区分大小写）**匹配图片，比较它们所在的一级类别目录。不加载模型，也不读取已有结果 CSV；类别内子目录的移动不算类别变更。支持的图片格式、根目录文件忽略规则与人工核对 CSV 导出一致。
+
+```powershell
+.\vent\Scripts\python.exe -m sign_classification.compare_classification_dirs `
+  --old-dir "D:/signs/classified_old" `
+  --reviewed-dir "D:/signs/reviewed" `
+  --output "D:/signs/classification_diff.csv"
+```
+
+也可在 PyCharm 中直接运行 `sign_classification/compare_classification_dirs.py`，传入相同参数。省略 `--output` 时生成 `核对目录/classification_diff.csv`；已有输出 CSV 会被更新。UTF-8 BOM 编码方便 Excel 打开中文。
+
+CSV 列为 `pic,old_class,new_class,status,old_path,new_path`。路径相对于各自输入根目录。默认只输出差异，加 `--include-unchanged` 则导出全部记录。
+
+| status | 含义 |
+| --- | --- |
+| class_changed | 两边图片文件名相同，但类别目录不同 |
+| only_old | 只在旧目录找到该图片文件名 |
+| only_new | 只在核对目录找到该图片文件名 |
+| ambiguous | 任一目录中同名图片超过一张，无法唯一匹配；类别和路径用 ` | ` 列出，不猜测对应关系 |
+| unchanged | 类别不变，仅在指定 `--include-unchanged` 时写入 CSV |
+
+本脚本只比较按文件名匹配的类别归属，不比较图片内容。图片被重命名时会分别表现为 only_old 和 only_new，不会自动判断它们是同一张图。
+
 ## 检查
 
 ```bash
