@@ -130,9 +130,9 @@ PyCharm 的参数填写 `--input "D:/signs/unclassified" --output "D:/signs/clas
 .\vent\Scripts\python.exe sign_classification/export_reviewed_csv.py --input "D:/signs/reviewed"
 ```
 
-输入目录下的一级子目录作为类别，递归收集其内部的 JPG/JPEG/PNG/BMP/WebP/TIF/TIFF/GIF。比如 `reviewed/10100_停车让行标志/camera1/001.png` 导出为 `001.png,10100_停车让行标志`。输入目录根部的文件不属于任何类别，不参与导出；空类别目录不产生记录。每个一级子目录都按类别处理，包括 `_待复核`，如不需要它，请先将其移出输入目录。
+输入目录下的一级子目录作为类别，递归收集其内部的 JPG/JPEG/PNG/BMP/WebP/TIF/TIFF/GIF。比如 `reviewed/10100_停车让行标志/camera1/001.png` 导出为 `001.png,10100_停车让行标志,1.0`。输入目录根部的文件不属于任何类别，不参与导出；空类别目录不产生记录。每个一级子目录都按类别处理，包括 `_待复核`，如不需要它，请先将其移出输入目录。
 
-在输入目录中生成或更新 `classification_results.csv`，列只有 `pic,class`：图片原文件名（含扩展名）和类别目录名。使用 UTF-8 BOM 编码，支持 Excel 中文。人工分类没有模型置信度，因此不生成 `confidence` 列；之前按三列读取的 Go 函数需相应改为两列。图片文件保持不变，CSV 写入成功后替换旧文件。没有图片时报告错误并保留旧 CSV。同名图片全部保留并在命令行提醒，以 pic 为键转换为 map 时应先处理重名。
+在输入目录中生成或更新 `classification_results.csv`，列为 `pic,class,confidence`：图片原文件名（含扩展名）、类别目录名和固定值 `1.0`。使用 UTF-8 BOM 编码，支持 Excel 中文。`confidence=1.0` 用于标记人工确认结果并兼容原有三列读取程序，不代表模型计算出的概率。图片文件保持不变，CSV 写入成功后替换旧文件。没有图片时报告错误并保留旧 CSV。同名图片全部保留并在命令行提醒，以 pic 为键转换为 map 时应先处理重名。
 
 ## 检查
 

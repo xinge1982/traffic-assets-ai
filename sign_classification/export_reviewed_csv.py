@@ -1,7 +1,7 @@
 """将人工核对后的类别目录导出为输入目录中的 classification_results.csv。
 
 输入目录的一级子目录名作为 class，递归读取各类别目录中的图片。
-pic 为原图片文件名（含扩展名）。只导出 pic,class 两列，不推理、不移动图片。
+pic 为原图片文件名（含扩展名）。导出 pic,class,confidence 三列，confidence 固定为 1.0；不推理、不移动图片。
 输出使用 UTF-8 BOM，方便 Excel 打开中文；已有同名 CSV 会被更新。
 
 示例（Python 3.11，无第三方依赖）：
@@ -37,7 +37,7 @@ def export_reviewed_csv(input_dir: Path) -> dict:
         for path in sorted(folder.rglob("*")):
             if not path.is_file() or path.is_symlink() or path.suffix.lower() not in IMAGE_EXTENSIONS:
                 continue
-            rows.append((path.name, folder.name))
+            rows.append((path.name, folder.name, 1.0))
             # Keep every image, but report possible ambiguity for pic-keyed maps.
             key = path.name.casefold()
             if key in seen:
@@ -59,7 +59,7 @@ def export_reviewed_csv(input_dir: Path) -> dict:
                                          delete=False) as stream:
             temporary = Path(stream.name)
             writer = csv.writer(stream)
-            writer.writerow(["pic", "class"])
+            writer.writerow(["pic", "class", "confidence"])
             writer.writerows(rows)
         os.replace(temporary, output)
     finally:

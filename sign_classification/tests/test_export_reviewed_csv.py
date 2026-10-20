@@ -21,7 +21,7 @@ class ReviewedCSVTests(unittest.TestCase):
     def read_rows(self):
         with (self.root / "classification_results.csv").open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
-            self.assertEqual(reader.fieldnames, ["pic", "class"])
+            self.assertEqual(reader.fieldnames, ["pic", "class", "confidence"])
             return list(reader)
 
     def test_exports_nested_images_with_first_level_class(self):
@@ -33,8 +33,8 @@ class ReviewedCSVTests(unittest.TestCase):
         self.assertEqual(result["images"], 2)
         self.assertEqual(result["classes"], 2)
         self.assertEqual(self.read_rows(), [
-            {"pic": "图,一.PNG", "class": "10100_停车让行标志"},
-            {"pic": "002.jpg", "class": "10200_减速让行标志"},
+            {"pic": "图,一.PNG", "class": "10100_停车让行标志", "confidence": "1.0"},
+            {"pic": "002.jpg", "class": "10200_减速让行标志", "confidence": "1.0"},
         ])
         self.assertTrue(Path(result["output"]).read_bytes().startswith(b"\xef\xbb\xbf"))
         self.assertEqual(image.read_bytes(), b"image bytes unchanged")
@@ -47,7 +47,7 @@ class ReviewedCSVTests(unittest.TestCase):
         moved.parent.mkdir()
         original.rename(moved)
         export_reviewed_csv(self.root)
-        self.assertEqual(self.read_rows(), [{"pic": "001.png", "class": "类别二"}])
+        self.assertEqual(self.read_rows(), [{"pic": "001.png", "class": "类别二", "confidence": "1.0"}])
         self.assertEqual(output.name, "classification_results.csv")
         self.assertEqual(list(self.root.glob("*.tmp")), [])
 
@@ -58,6 +58,7 @@ class ReviewedCSVTests(unittest.TestCase):
         self.assertEqual(result["images"], 2)
         self.assertEqual(result["duplicate_names"], 1)
         self.assertEqual(len(self.read_rows()), 2)
+        self.assertTrue(all(row["confidence"] == "1.0" for row in self.read_rows()))
         for path in self.root.rglob("*.png"):
             path.unlink()
         output = self.root / "classification_results.csv"
