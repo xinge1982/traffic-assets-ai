@@ -120,6 +120,20 @@ PyCharm 的参数填写 `--input "D:/signs/unclassified" --output "D:/signs/clas
 
 同时生成 `classification_results.csv`，使用 UTF-8 BOM 编码，方便 Excel 打开中文。列为 `pic`（原图片文件名，含扩展名）、`class`（模型预测的最佳类别）和 `confidence`（该类别的概率，范围 0～1）。低置信度图片仍记录预测类别，不写成 `_待复核`；启用 `--skip-errors` 时失败图片也有一行，但类别和置信度留空，具体错误见 JSONL。同名图片可能有多行，其完整路径可在 JSONL 中查看。CSV 逐行保存，中途停止时保留已写入结果。
 
+## 将人工核对后的目录重新导出为 CSV
+
+把图片人工移动到正确类别目录后，使用 `export_reviewed_csv.py` 根据**实际目录**重新生成结果，不加载模型，不读取旧 CSV 的预测类别。该脚本仅使用 Python 标准库。
+
+```powershell
+.\vent\Scripts\python.exe -m sign_classification.export_reviewed_csv --input "D:/signs/reviewed"
+# 也支持 PyCharm 直接运行文件：
+.\vent\Scripts\python.exe sign_classification/export_reviewed_csv.py --input "D:/signs/reviewed"
+```
+
+输入目录下的一级子目录作为类别，递归收集其内部的 JPG/JPEG/PNG/BMP/WebP/TIF/TIFF/GIF。比如 `reviewed/10100_停车让行标志/camera1/001.png` 导出为 `001.png,10100_停车让行标志`。输入目录根部的文件不属于任何类别，不参与导出；空类别目录不产生记录。每个一级子目录都按类别处理，包括 `_待复核`，如不需要它，请先将其移出输入目录。
+
+在输入目录中生成或更新 `classification_results.csv`，列只有 `pic,class`：图片原文件名（含扩展名）和类别目录名。使用 UTF-8 BOM 编码，支持 Excel 中文。人工分类没有模型置信度，因此不生成 `confidence` 列；之前按三列读取的 Go 函数需相应改为两列。图片文件保持不变，CSV 写入成功后替换旧文件。没有图片时报告错误并保留旧 CSV。同名图片全部保留并在命令行提醒，以 pic 为键转换为 map 时应先处理重名。
+
 ## 检查
 
 ```bash
